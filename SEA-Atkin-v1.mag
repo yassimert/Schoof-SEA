@@ -1,0 +1,433 @@
+// SEA Algorithm Implementation - Atkin Modular Polynomials - v1
+clear;
+
+FindOrderFrobenius := function(poly, ell, _x, p)
+	f := _x; s := 0;
+	for i := 1 to ell+1 do
+		if IsDivisibleBy(ell+1, i) and (-1)^((ell+1) div i) eq LegendreSymbol(p, ell) then
+			for k := 1 to i-s do
+				f := Modexp(f,p,poly);
+			end for;
+			if GCD(f-_x, poly) eq poly then
+				return i;
+			else
+				s := i;				
+			end if;
+		end if;
+	end for;
+	return -1;
+end function;
+
+constructR := function(At, size, m1, m2, m3, t3)
+	R := []; T1 := []; T2 := []; T1[1] := 1; T2[1] := 0; 
+	sn := 1; dn := 1; tmp := 1; fl := true;
+	
+	for i := 1 to #At-1 by 2 do
+		dn := 1; 
+		
+		if fl eq true then
+			ss := T1; dd := T2;
+		else
+			ss := T2; dd := T1;
+		end if;
+		
+		for j := 1 to #At[i] do
+			for k := 1 to sn do
+				crt1 := []; crt2 := [];
+				crt1[1] := ss[k]; 
+				crt1[2] := At[i][j];
+				crt2[1] := tmp; 
+				crt2[2] := At[i+1][1];  
+				dd[dn] := CRT(crt1,crt2); dn +:= 1;
+			end for;
+		end for;
+		sn := dn-1;
+		
+		if fl eq true then
+			T1 := ss; T2 := dd;
+		else
+			T1 := dd; T2 := ss;			
+		end if;
+		
+		fl := not fl;
+		tmp *:= At[i+1][1];
+	end for;
+
+	if fl eq true then
+		ss := T1;
+	else
+		ss := T2;
+	end if;
+	
+	for i := 1 to size do
+		R[i] := ((ss[i]-t3)*Modinv(m2*m3, m1)) mod m1;	
+		if R[i] lt 0 then
+			R[i] +:= m1;
+		end if;
+		R[i+size] := R[i]-m1;			
+	end for;
+	
+	return Sort(R);
+end function;
+
+MatchSort := function(Ap, Ep, p, a4, a6)
+	S1 := []; S2 := []; sizeS1 := 1; sizeS2 := 1;
+	m1 := 1; m2 := 1; 
+	for i := 1 to #Ap-1 by 2 do
+        if sizeS1 le sizeS2 then
+            m1 *:= Ap[i+1][1];
+            Append(~S1,Ap[i]);
+			Append(~S1,Ap[i+1]);
+            sizeS1 *:= #Ap[i];            
+        else
+            m2 *:= Ap[i+1][1];        
+            Append(~S2,Ap[i]);
+			Append(~S2,Ap[i+1]);
+            sizeS2 *:= #Ap[i];
+		end if;
+	end for;	
+
+	Ep1 := []; 	Ep2 := []; 
+	m3 := 1;
+	for i := 1 to #Ep do
+		Ep1[i] := Ep[i][1];		
+		Ep2[i] := Ep[i][2];
+		m3 *:= Ep[i][2];
+	end for;
+	assert m1*m2*m3 gt 4*Sqrt(p);
+	
+	t3 := CRT(Ep1, Ep2);
+	
+	R1 := constructR(S1, sizeS1, m1, m2, m3, t3);
+	R2 := constructR(S2, sizeS2, m2, m1, m3, t3);
+
+	E := EllipticCurve([0,0,0,a4,a6]);
+	for i := 1 to 5 do
+		Pt := Random(E);
+		Qt := (p+1-t3)*Pt;
+		if Qt eq E!0 then
+			return t3;
+		end if;		
+
+		m1m3Pt := m1*m3*Pt;		
+		m2m3Pt := m2*m3*Pt;		
+		
+		tA := []; tB := []; tC := []; idx := []; 
+		for j := 1 to #R1 do
+			tA[j] := Qt-R1[j]*m2m3Pt; 
+			tB[j] := tA[j][1];
+			tC[j] := R1[j];
+			idx[j] := j;
+		end for;		
+		
+		ParallelSort(~tB, ~idx);
+
+		Qr1 := []; r1 := [];		
+		for j := 1 to #tA do
+			Qr1[j] := tA[idx[j]];
+			r1[j] := tC[idx[j]];
+		end for;
+		
+		for j := 1 to #R2 do
+			tP := R2[j]*m1m3Pt;
+			if tP in Qr1 then
+				k := Index(Qr1,tP);
+				if k ne -1 then 
+					t := t3+m3*(m1*R2[j]+m2*r1[k]);
+					break;
+				end if;	
+			end if;
+		end for;
+	end for;
+	return t;
+end function;
+
+getNonSquare := function(ell)
+	d := 0;	
+	for i := 1 to ell-1 do
+		if LegendreSymbol(i,ell) eq -1 then
+			return i;
+		end if;
+	end for;
+	return d;
+end function;
+
+divpols := function(ell, x, a4, a6, Q)
+	__ := 1; eqn := Q!(16*(x^3+a4*x+a6)^2); f := [];  
+	f[__+0] := Q!(0*x); f[__+1] := Q!(0*x+1); f[__+2] := Q!(0*x+1); 
+	f[__+3] := Q!(3*x^4+6*a4*x^2+12*a6*x-a4^2);  
+ 	f[__+4] := Q!(2*(x^6+5*a4*x^4+20*a6*x^3-5*a4^2*x^2-4*a4*a6*x-8*a6^2-a4^3));
+	if ell gt 4 then
+		for i := 5 to ell do
+			if IsOdd(i) then
+				k := (i-1) div 2;
+				if IsOdd(k) then
+					f[__+i] := f[__+k+2]*f[__+k]^3-eqn*f[__+k-1]*f[__+k+1]^3;									
+				else
+					f[__+i] := eqn*f[__+k+2]*f[__+k]^3-f[__+k-1]*f[__+k+1]^3;				
+				end if;
+			else
+				k := i div 2;
+				f[__+i] := (f[__+k+2]*f[__+k-1]^2-f[__+k-2]*f[__+k+1]^2)*f[__+k];
+			end if;
+		end for;
+ 		return f;
+	else
+		return f;
+	end if;
+end function;
+
+ADD := function(x1, y1, i1, x2, y2, i2, a4)
+	if i1 then
+		return x2, y2, i2;
+	elif i2 then
+		return x1, y1, i1;
+	elif x1 eq x2 then
+		if y1 eq 0 then
+			return 0*x1, 0*y1, true; 
+		elif y1 ne y2 then
+			return 0*x1, 0*y1, true;
+		else
+			x3 := ((3*(x1^2)+a4)/(2*y1))^2-2*x1;
+			y3 := ((3*(x1^2)+a4)/(2*y1))*(x1-x3)-y1;
+			return x3, y3, false;
+		end if;
+	end if;
+	L := (y2-y1)/(x2-x1);
+	x3 := L^2-x1-x2;
+	y3 := L*(x1-x3)-y1;
+	return x3, y3, false;
+end function;
+
+SEA := function(p, a4, a6, x, y, _x)
+	M := 1; ell := 2; Ap := []; Ep := []; ai := 1; ei := 1; atkins := 1; __ := 1;
+	j := 1728*4*a4^3/(4*a4^3+27*a6^2); P := Parent(x);
+	
+	if GCD(Modexp(_x, p, _x^3+a4*_x+a6)-_x, _x^3+a4*_x+a6) eq 1 then	
+		Ep[ei] := [1,2];
+	else
+		Ep[ei] := [0,2];
+	end if;
+	ei +:= 1;
+
+	while M le 4*Sqrt(p) do
+		ell := NextPrime(ell);
+		M *:= ell;
+		poly := P!AtkinModularPolynomial(ell);
+		poly := UnivariatePolynomial(Evaluate(poly, y, j));
+		if Degree(GCD(poly, Modexp(_x, p, poly)-_x)) eq 0 then		
+			if atkins gt Log(2,p) then
+				M := M/ell;
+			else
+				ell,": Atkin";
+				r := FindOrderFrobenius(poly, ell, _x, p);
+				d := getNonSquare(ell);
+
+				FF := GF(ell);
+				FFF<i> := ExtensionField<FF, x|x^2-d>; 
+				g := RootOfUnity(r, FFF);
+
+				S := []; kk := 1;
+				for i := 1 to r do
+					if GCD(i,r) eq 1 then
+						S[kk] := g^i; kk +:= 1;
+					end if;
+				end for;
+
+				if #S eq 1 then
+					Snum := 1;
+				else
+					Snum := #S div 2;
+				end if;
+				
+				Atl := []; tct := 1;				
+				for i := 1 to Snum do
+					g1 := ElementToSequence(S[i])[1];
+					z := (FF!p*(g1+1)/2);
+					if LegendreSymbol(Integers()!z, ell) ne -1 then
+						sqz := Sqrt(z);
+						Atl[tct] := Integers()!( 2*sqz); tct +:= 1;
+						Atl[tct] := Integers()!(-2*sqz); tct +:= 1;
+					end if;
+				end for;	
+				Atl := Sort(Atl);
+				atkins *:= #Atl;	
+				Ap[ai] := Atl; ai +:= 1;
+				Ap[ai] := [Integers()!ell]; ai +:= 1;	
+			end if;
+		else
+			ell,": Elkies";
+			f := Roots(poly)[1][1];
+			/* x -> f   y -> j */
+			PHI_ell := P!AtkinModularPolynomial(ell);
+
+			dxPHI_ell := Derivative(PHI_ell, x);	
+			dyPHI_ell := Derivative(PHI_ell, y);	
+			dxdxPHI_ell := Derivative(dxPHI_ell, x);
+			dxdyPHI_ell := Derivative(dxPHI_ell, y);	
+			dydyPHI_ell := Derivative(dyPHI_ell, y);	
+
+			evals := [];
+			evals[1] := Evaluate(dxPHI_ell, [f,j]);
+			evals[2] := Evaluate(dyPHI_ell, [f,j]);
+			evals[3] := Evaluate(dxdxPHI_ell, [f,j]);
+			evals[4] := Evaluate(dxdyPHI_ell, [f,j]);						
+			evals[5] := Evaluate(dydyPHI_ell, [f,j]);
+			
+			m := (18*a6)/a4; jd := m*j; k := jd/(1728-j);
+			fd := -jd*evals[2]/evals[1];
+
+			rr := Roots(UnivariatePolynomial(Evaluate(PHI_ell, x, f)));
+			for i := #rr to 1 by -1 do
+				jt := rr[i][1];
+				evals[6] := Evaluate(dxPHI_ell, [f,jt]);				
+				evals[7] := Evaluate(dyPHI_ell, [f,jt]);
+				evals[8] := Evaluate(dxdxPHI_ell, [f,jt]);
+				evals[9] := Evaluate(dxdyPHI_ell, [f,jt]);
+				evals[10] := Evaluate(dydyPHI_ell, [f,jt]);
+				
+				jtd := jd*evals[2]*evals[6]/(ell*evals[1]*evals[7]);
+
+				mt := jtd/jt; kt := jtd/(1728-jt);
+				a4t := ell^4*mt*kt/48;
+				a6t := ell^6*mt^2*kt/864;
+
+				r := -(fd^2*evals[8]+2*ell*fd*jtd*evals[9]+ell^2*jtd^2*evals[10])/(fd*evals[6])-(jd*evals[5]+2*fd*evals[4]+(fd^2/jd)*evals[3])/evals[2];
+				p1 := ell*(r/2+(k-ell*kt)/4+(ell*mt-m)/3);
+				d := (ell-1) div 2;
+				
+				c := []; 
+				c[1] := -a4/5; c[2] := -a6/7;
+				for k := 3 to ell-1 do 
+					sum := 0;
+					for j := 1 to k-2 do
+						sum +:= c[j]*c[k-1-j]; 
+					end for;
+					c[k] := (3/((k-2)*(2*k+3)))*sum;
+				end for;
+			
+				ch := []; 
+				ch[1] := -a4t/5; ch[2] := -a6t/7;
+				for k := 3 to ell-1 do 
+					sum := 0;
+					for j := 1 to k-2 do
+						sum +:= ch[j]*ch[k-1-j]; 
+					end for;
+					ch[k] := (3/((k-2)*(2*k+3)))*sum;
+				end for;	
+
+				L<w> := LaurentSeriesRing(Parent(a4));
+		
+				sum := 0;
+				for k := 1 to d do
+					sum +:= ((ch[k]-ell*c[k])/((2*k+1)*(2*k+2)))*w^(k+1);
+				end for;
+				Aw := Exp((-p1/2)*w-sum);
+			
+				Cw := 0;
+				for k := 1 to d do
+					Cw +:= c[k]*w^k;
+				end for;
+			
+				Fl := []; Fl[d+1] := 1; 
+				for i := 1 to d do
+					sum2 := 0;
+					for k := 1 to i do
+						sum1 := 0;
+						for j := 0 to k do
+							num := d-i+k;
+							den := k-j;
+							comb := Factorial(num)/(Factorial(den)*Factorial(num-den));
+							if k-j eq 0 then
+								if j eq 0 then
+									sum1 +:= comb;		
+								end if;
+							else
+								sum1 +:= comb*Coefficient(Cw^(k-j), j); 
+							end if;
+						end for;
+						sum2 +:= sum1*Fl[d-i+k+1];
+					end for;
+					Fl[d-i+1] := Coefficients(Aw)[i+1]-sum2;
+				end for;
+				
+				kpol := 0;
+				for i := #Fl to 1 by -1 do
+					kpol +:= Fl[i]*_x^(i-1);
+				end for;
+			
+				Q := quo<Parent(_x) | kpol>;
+				dp := divpols(ell, _x, a4, a6, Q);
+
+				if dp[__+ell] eq 0 then				
+					Qx := Q!_x; Qxp := Q!_x^p;
+					Qyp := Q!(_x^3+a4*_x+a6)^((p-1) div 2); 		
+					eqn := Q!(4*(_x^3+a4*_x+a6));
+					
+					if Qx eq Qxp then
+						if Qyp eq 1 then
+							lmd := 1;
+						else
+							lmd := -1;			
+						end if;
+						break;
+					else
+						for k := 2 to (ell-1) div 2 do
+							if IsOdd(k) then
+								xk := dp[__+k]^2*(Qxp-Qx) + eqn*dp[__+k-1]*dp[__+k+1];
+							else
+								xk := eqn*dp[__+k]^2*(Qxp-Qx) + dp[__+k-1]*dp[__+k+1];
+							end if;
+							if xk eq 0 then
+								if IsOdd(k) then
+									yk := eqn*(Qyp*dp[__+k]^3 - dp[__+k+2]*dp[__+k-1]^2 + dp[__+k-2]*dp[__+k+1]^2); 
+								else
+									yk := eqn^2*Qyp*dp[__+k]^3 + dp[__+k-2]*dp[__+k+1]^2 - dp[__+k+2]*dp[__+k-1]^2;						
+								end if;
+								if yk eq 0 then
+									lmd := k;						
+								else
+									lmd := -k;			
+								end if; 		
+								break;
+							end if;	
+						end for;
+					end if;	
+				end if;			
+			end for;
+			FF := GF(ell);
+		 	t := FF!lmd + FF!p/FF!lmd;
+			Ep[ei] := [Integers()!t,Integers()!ell]; ei +:= 1;				
+		end if;
+	end while;
+
+	t := MatchSort(Ap, Ep, p, a4, a6);
+	
+	return p+1-t;
+end function;
+
+/* ----------------------- MAIN ----------------------- */
+
+for i := 1 to 1000 do
+	i;
+	p := NextPrime(Random([2^50 .. 2^60]));
+	F<ii> := GF(p);
+	P<x,y> := PolynomialRing(F,2);
+	R<_x> := PolynomialRing(F);
+	
+	repeat
+		repeat
+			a4 := Random(F); a6 := Random(F);
+		until IsEllipticCurve([0,0,0,a4,a6]);
+		E := EllipticCurve([0,0,0,a4,a6]);
+	until jInvariant(E) ne 0 or jInvariant(E) ne 1728;
+	
+	time res1 := SEA(p, a4, a6, x, y, _x);
+	time res2 := #E;
+	
+	res1;
+	res2;
+	assert res1 eq res2;
+	"\n";
+end for;
+

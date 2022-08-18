@@ -1,0 +1,478 @@
+// CheckIfIsogenous Algorithm Implementation
+clear;
+
+FindOrderFrobenius := function(poly, ell, _x, p)
+	f := _x; s := 0;
+	for i := 1 to ell+1 do
+		if IsDivisibleBy(ell+1, i) and (-1)^((ell+1) div i) eq LegendreSymbol(p, ell) then
+			for k := 1 to i-s do
+				f := Modexp(f,p,poly);
+			end for;
+			if GCD(f-_x, poly) eq poly then
+				return i;
+			else
+				s := i;				
+			end if;
+		end if;
+	end for;
+	return -1;
+end function;
+
+getNonSquare := function(ell)
+	d := 0;	
+	for i := 1 to ell-1 do
+		if LegendreSymbol(i,ell) eq -1 then
+			return i;
+		end if;
+	end for;
+	return d;
+end function;
+
+divPols := function(ell, x, a4, a6, Q)
+	__ := 1; eqn := Q!(16*(x^3+a4*x+a6)^2); f := [];  
+	f[__+0] := Q!(0*x); f[__+1] := Q!(0*x+1); f[__+2] := Q!(0*x+1); 
+	f[__+3] := Q!(3*x^4+6*a4*x^2+12*a6*x-a4^2);  
+ 	f[__+4] := Q!(2*(x^6+5*a4*x^4+20*a6*x^3-5*a4^2*x^2-4*a4*a6*x-8*a6^2-a4^3));
+	if ell gt 4 then
+		for i := 5 to ell do
+			if IsOdd(i) then
+				k := (i-1) div 2;
+				if IsOdd(k) then
+					f[__+i] := f[__+k+2]*f[__+k]^3-eqn*f[__+k-1]*f[__+k+1]^3;									
+				else
+					f[__+i] := eqn*f[__+k+2]*f[__+k]^3-f[__+k-1]*f[__+k+1]^3;				
+				end if;
+			else
+				k := i div 2;
+				f[__+i] := (f[__+k+2]*f[__+k-1]^2-f[__+k-2]*f[__+k+1]^2)*f[__+k];
+			end if;
+		end for;
+ 		return f;
+	else
+		return f;
+	end if;
+end function;
+
+getKernelPoly := function(ell, evals, m, jd, k, fd, jt, x, a4, a6)
+	jtd := jd*evals[2]*evals[6]/(ell*evals[1]*evals[7]);
+
+	mt := jtd/jt; kt := jtd/(1728-jt);
+	a4t := ell^4*mt*kt/48;
+	a6t := ell^6*mt^2*kt/864;
+
+	r := -(fd^2*evals[8]+2*ell*fd*jtd*evals[9]+ell^2*jtd^2*evals[10])/(fd*evals[6])-(jd*evals[5]+2*fd*evals[4]+(fd^2/jd)*evals[3])/evals[2];
+	p1 := ell*(r/2+(k-ell*kt)/4+(ell*mt-m)/3);
+	d := (ell-1) div 2;
+
+	a4t := ell^4*mt*kt/48;
+	a6t := ell^6*mt^2*kt/864;
+
+	t := []; t[1] := d; t[2] := p1/2;
+	t[3] := ((1-10*d)*a4-a4t)/30;
+	t[4] := ((1-28*d)*a6-42*t[2]*a4-a6t)/70;
+
+	c := []; c[1] := 0; c[2] := 6*t[3]+2*a4*t[1];	
+	c[3] := 10*t[4]+6*a4*t[2]+4*a6*t[1];
+
+	for n := 2 to d-1 do
+		s := 0;
+		for k := 1 to n-1 do
+			s +:= c[k+1]*c[n-k+1];
+		end for;
+		c[n+2] := (3*s-(2*n-1)*(n-1)*a4*c[n]-(2*n-2)*(n-2)*a6*c[n-1])/((n-1)*(2*n+5));
+	end for;
+
+	for n := 3 to d-1 do
+		t[n+2] := (c[n+1]-(4*n-2)*a4*t[n]-(4*n-4)*a6*t[n-1])/(4*n+2);
+	end for;
+
+	s := []; s[1] := 1; F := Parent(a4);
+	for n := 1 to d do
+		sum := 0;
+		for i := 1 to n do
+			sum +:= (-1)^i*t[i+1]*s[n-i+1];
+		end for;
+		s[n+1] := F!(-1/n)*sum;
+	end for;
+	
+	kpol := 0;
+	for i := 0 to d do
+		kpol +:= (-1)^i*s[i+1]*x^(d-i);
+	end for; 					
+	return kpol;
+end function;
+
+AtkinPart := function(poly, ell, x, p)
+	r := FindOrderFrobenius(poly, ell, x, p);
+	d := getNonSquare(ell);
+	FF := GF(ell);
+	FFF<i> := ExtensionField<FF, x|x^2-d>; 
+	g := RootOfUnity(r, FFF);
+
+	S := []; si := 1;
+	for i := 1 to r do
+		if GCD(i,r) eq 1 then
+			S[si] := g^i; si +:= 1;
+		end if;
+	end for;
+
+	if #S eq 1 then
+		Snum := 1;
+	else
+		Snum := #S div 2;
+	end if;
+	
+	Atl := []; tct := 1;				
+	for i := 1 to Snum do
+		g1 := ElementToSequence(S[i])[1];
+		z := (FF!p*(g1+1)/2);
+		if LegendreSymbol(Integers()!z, ell) ne -1 then
+			sqz := Sqrt(z);
+			Atl[tct] := Integers()!( 2*sqz); tct +:= 1;
+			Atl[tct] := Integers()!(-2*sqz); tct +:= 1;
+		end if;
+	end for;	
+	Atl := Sort(Atl);
+	return Atl;
+end function;
+
+ElkiesPart := function(ell, PHI_ell, derivs, f, j, x, _x, a4, a6, p) // follows the method in Aleksa Stankovic's Sage code
+	evals := []; __ := 1;
+	evals[1] := Evaluate(derivs[1], [f,j]);
+	evals[2] := Evaluate(derivs[2], [f,j]);
+	evals[3] := Evaluate(derivs[3], [f,j]);
+	evals[4] := Evaluate(derivs[4], [f,j]);						
+	evals[5] := Evaluate(derivs[5], [f,j]);
+	
+	m := (18*a6)/a4; jd := m*j; k := jd/(1728-j);
+	fd := -jd*evals[2]/evals[1];
+
+	rr := Roots(UnivariatePolynomial(Evaluate(PHI_ell, x, f)));
+	for i := #rr to 1 by -1 do
+		jt := rr[i][1];
+		evals[6] := Evaluate(derivs[1], [f,jt]);				
+		evals[7] := Evaluate(derivs[2], [f,jt]);
+		evals[8] := Evaluate(derivs[3], [f,jt]);
+		evals[9] := Evaluate(derivs[4], [f,jt]);
+		evals[10] := Evaluate(derivs[5], [f,jt]);
+		
+		kpol := getKernelPoly(ell, evals, m, jd, k, fd, jt, _x, a4, a6);
+		
+		Q := quo<Parent(_x) | kpol>;
+		dp := divPols(ell, _x, a4, a6, Q);
+
+		if dp[__+ell] eq 0 then				
+			Qx := Q!_x; Qxp := Q!_x^p;
+			Qyp := Q!(_x^3+a4*_x+a6)^((p-1) div 2); 		
+			eqn := Q!(4*(_x^3+a4*_x+a6));
+			
+			if Qx eq Qxp then
+				if Qyp eq 1 then
+					lmd := 1;
+				else
+					lmd := -1;			
+				end if;
+				break;
+			else
+				for k := 2 to (ell-1) div 2 do
+					if IsOdd(k) then
+						xk := dp[__+k]^2*(Qxp-Qx) + eqn*dp[__+k-1]*dp[__+k+1];
+					else
+						xk := eqn*dp[__+k]^2*(Qxp-Qx) + dp[__+k-1]*dp[__+k+1];
+					end if;
+					if xk eq 0 then
+						if IsOdd(k) then
+							yk := eqn*(Qyp*dp[__+k]^3 - dp[__+k+2]*dp[__+k-1]^2 + dp[__+k-2]*dp[__+k+1]^2); 
+						else
+							yk := eqn^2*Qyp*dp[__+k]^3 + dp[__+k-2]*dp[__+k+1]^2 - dp[__+k+2]*dp[__+k-1]^2;						
+						end if;
+						if yk eq 0 then
+							lmd := k;						
+						else
+							lmd := -k;			
+						end if; 		
+						break;
+					end if;	
+				end for;
+			end if;	
+		end if;	
+	end for;
+	FF := GF(ell);
+ 	t := FF!lmd + FF!p/FF!lmd;
+	return t;
+end function;
+
+constructR := function(At, size, m1, m2, m3, t3)
+	R := []; T1 := []; T2 := []; T1[1] := 1; T2[1] := 0; 
+	sn := 1; dn := 1; tmp := 1; fl := true;
+	
+	for i := 1 to #At-1 by 2 do
+		dn := 1; 
+		
+		if fl eq true then
+			ss := T1; dd := T2;
+		else
+			ss := T2; dd := T1;
+		end if;
+		
+		for j := 1 to #At[i] do
+			for k := 1 to sn do
+				crt1 := []; crt2 := [];
+				crt1[1] := ss[k]; 
+				crt1[2] := At[i][j];
+				crt2[1] := tmp; 
+				crt2[2] := At[i+1][1];  
+				dd[dn] := CRT(crt1,crt2); dn +:= 1;
+			end for;
+		end for;
+		sn := dn-1;
+		
+		if fl eq true then
+			T1 := ss; T2 := dd;
+		else
+			T1 := dd; T2 := ss;			
+		end if;
+		
+		fl := not fl;
+		tmp *:= At[i+1][1];
+	end for;
+
+	if fl eq true then
+		ss := T1;
+	else
+		ss := T2;
+	end if;
+	
+	for i := 1 to size do
+		R[i] := ((ss[i]-t3)*Modinv(m2*m3, m1)) mod m1;	
+		if R[i] lt 0 then
+			R[i] +:= m1;
+		end if;
+		R[i+size] := R[i]-m1;			
+	end for;
+	
+	return Sort(R);
+end function;
+
+MatchSort := function(Ap, Ep, p, a4, a6)
+	S1 := []; S2 := []; sizeS1 := 1; sizeS2 := 1;
+	m1 := 1; m2 := 1; 
+	for i := 1 to #Ap-1 by 2 do
+        if sizeS1 le sizeS2 then
+            m1 *:= Ap[i+1][1];
+            Append(~S1,Ap[i]);
+			Append(~S1,Ap[i+1]);
+            sizeS1 *:= #Ap[i];            
+        else
+            m2 *:= Ap[i+1][1];        
+            Append(~S2,Ap[i]);
+			Append(~S2,Ap[i+1]);
+            sizeS2 *:= #Ap[i];
+		end if;
+	end for;	
+
+	Ep1 := []; 	Ep2 := []; 
+	m3 := 1;
+	for i := 1 to #Ep do
+		Ep1[i] := Ep[i][1];		
+		Ep2[i] := Ep[i][2];
+		m3 *:= Ep[i][2];
+	end for;
+	assert m1*m2*m3 gt 4*Sqrt(p);
+	
+	t3 := CRT(Ep1, Ep2);
+	
+	R1 := constructR(S1, sizeS1, m1, m2, m3, t3);
+	R2 := constructR(S2, sizeS2, m2, m1, m3, t3);
+
+	E := EllipticCurve([0,0,0,a4,a6]);
+	for i := 1 to 5 do
+		Pt := Random(E);
+		Qt := (p+1-t3)*Pt;
+		if Qt eq E!0 then
+			return t3;
+		end if;		
+
+		m1m3Pt := m1*m3*Pt;		
+		m2m3Pt := m2*m3*Pt;		
+		
+		tA := []; tB := []; tC := []; idx := []; 
+		for j := 1 to #R1 do
+			tA[j] := Qt-R1[j]*m2m3Pt; 
+			tB[j] := tA[j][1];
+			tC[j] := R1[j];
+			idx[j] := j;
+		end for;		
+		
+		ParallelSort(~tB, ~idx);
+
+		Qr1 := []; r1 := [];		
+		for j := 1 to #tA do
+			Qr1[j] := tA[idx[j]];
+			r1[j] := tC[idx[j]];
+		end for;
+		
+		for j := 1 to #R2 do
+			tP := R2[j]*m1m3Pt;
+			if tP in Qr1 then
+				k := Index(Qr1,tP);
+				if k ne -1 then 
+					t := t3+m3*(m1*R2[j]+m2*r1[k]);
+					break;
+				end if;	
+			end if;
+		end for;
+	end for;
+	return t;
+end function;
+
+CheckIfIsogenous := function(p, a4_1, a6_1, a4_2, a6_2, x, y, _x)
+	M := 1; ell := 2; At1 := []; At2 := []; Ep := []; ai := 1; aj := 1; ae := 1; ei := 1; atkins := 1; P := Parent(x); Atkinells := [];
+	j1 := 1728*4*a4_1^3/(4*a4_1^3+27*a6_1^2);
+	j2 := 1728*4*a4_2^3/(4*a4_2^3+27*a6_2^2);
+	
+	e1 := GCD(Modexp(_x, p, _x^3+a4_1*_x+a6_1)-_x, _x^3+a4_1*_x+a6_1);
+	e2 := GCD(Modexp(_x, p, _x^3+a4_2*_x+a6_2)-_x, _x^3+a4_2*_x+a6_2);	
+	
+	if (e1 eq 1 and e2 ne 1) or (e1 ne 1 and e2 eq 1) then
+		"Traces are different mod 2!";
+		return false, -1;
+	elif e1 eq 1 then
+		Ep[ei] := [1,2];	
+	else
+		Ep[ei] := [0,2];		
+	end if;
+	ei +:= 1;
+	
+	while M le 4*Sqrt(p) do
+		ell := NextPrime(ell);
+		M *:= ell;
+		poly := P!AtkinModularPolynomial(ell);
+		poly1 := UnivariatePolynomial(Evaluate(poly, y, j1));
+		poly2 := UnivariatePolynomial(Evaluate(poly, y, j2));
+
+		deg1 := Degree(GCD(poly1, Modexp(_x, p, poly1)-_x));
+		deg2 := Degree(GCD(poly2, Modexp(_x, p, poly2)-_x));
+
+		if (deg1 eq 0 and deg2 ne 0) or (deg1 ne 0 and deg2 eq 0) then // primes are different in terms of being Atkin or Elkies
+			printf "Traces are different mod %o!\n",ell;			
+			return false, -1;
+		end if;
+		
+		if deg1 ne 0 then
+			ell,": Elkies_1";
+			f := Roots(poly1)[1][1];
+			PHI_ell := P!AtkinModularPolynomial(ell);
+			derivs := [];
+			derivs[1] := Derivative(PHI_ell, x);	
+			derivs[2] := Derivative(PHI_ell, y);	
+			derivs[3] := Derivative(derivs[1], x);
+			derivs[4] := Derivative(derivs[1], y);	
+			derivs[5] := Derivative(derivs[2], y);	
+
+			et1 := ElkiesPart(ell, PHI_ell, derivs, f, j1, x, _x, a4_1, a6_1, p);
+			
+			ell,": Elkies_2";
+			f := Roots(poly2)[1][1];
+			et2 := ElkiesPart(ell, PHI_ell, derivs, f, j2, x, _x, a4_2, a6_2, p);
+
+			if et1 ne et2 then
+				printf "Error @ ElkiesPart: Traces are different mod %o!\n",ell;												
+				return false, -1;
+			else
+				Ep[ei] := [Integers()!et1,Integers()!ell]; ei +:= 1;		
+			end if;
+		else
+			if atkins gt Log(2,p)/2 then
+				M := M/ell;
+			else
+				Atkinells[ae] := ell; 
+				atkins +:= ell; ae +:= 1;				
+			end if;
+		end if;
+	end while;
+	
+	for i := 1 to ae-1 do
+		Atkinells[i],": Atkin_1";
+		poly := P!AtkinModularPolynomial(Atkinells[i]);
+		poly1 := UnivariatePolynomial(Evaluate(poly, y, j1));
+		Atl1 := AtkinPart(poly1, Atkinells[i], _x, p);
+		At1[ai] := Atl1; ai +:= 1;
+		At1[ai] := [Integers()!Atkinells[i]]; ai +:= 1;	
+		
+		Atkinells[i],": Atkin_2";
+		poly2 := UnivariatePolynomial(Evaluate(poly, y, j2));
+		Atl2 := AtkinPart(poly2, Atkinells[i], _x, p);
+		At2[aj] := Atl2; aj +:= 1;
+		At2[aj] := [Integers()!Atkinells[i]]; aj +:= 1;	
+	end for;
+	
+	t1 := MatchSort(At1, Ep, p, a4_1, a6_1);
+	
+	t2 := MatchSort(At2, Ep, p, a4_2, a6_2);
+	
+	if t1 ne t2 then
+		printf "Error : Final traces are different!\n";		 
+		return false, -1;
+	else
+		return true,p+1-t1;
+	end if;
+end function;
+
+getRandomCurves := function(F)
+	repeat
+		repeat
+			a4_1 := Random(F); a6_1 := Random(F);
+		until IsEllipticCurve([0,0,0,a4_1,a6_1]);
+		E1 := EllipticCurve([0,0,0,a4_1,a6_1]);
+	until jInvariant(E1) ne 0 or jInvariant(E1) ne 1728;
+	repeat	
+		repeat
+			a4_2 := Random(F); a6_2 := Random(F);
+		until IsEllipticCurve([0,0,0,a4_2,a6_2]);
+		E2 := EllipticCurve([0,0,0,a4_2,a6_2]);
+	until jInvariant(E2) ne 0 or jInvariant(E2) ne 1728;	
+	return E1, E2;
+end function;
+
+getIsogenousCurves := function(F)
+	repeat
+		repeat
+			a4_1 := Random(F); a6_1 := Random(F);
+		until IsEllipticCurve([0,0,0,a4_1,a6_1]);
+		E1 := EllipticCurve([0,0,0,a4_1,a6_1]);
+	until jInvariant(E1) ne 0 or jInvariant(E1) ne 1728;	
+	E2 := IsogenyFromKernel(E1, DivisionPolynomial(E1, 5));
+	return E1, E2;
+end function;
+
+for i := 1 to 1000 do
+	i;
+	p := NextPrime(Random([2^100 .. 2^150]));
+
+	F<ii> := GF(p);
+	P<x,y> := PolynomialRing(F,2);
+	R<_x> := PolynomialRing(F);
+
+	E1, E2 := getRandomCurves(F);
+	//E1, E2 := getIsogenousCurves(F);
+
+	a4_1 := Coefficients(E1)[4];
+	a6_1 := Coefficients(E1)[5];
+
+	a4_2 := Coefficients(E2)[4];
+	a6_2 := Coefficients(E2)[5];	
+
+	printf "Checking if E1 : y^2 = x^3 + %ox + %o and E2 : y^2 = x^3 + %ox + %o are isogenous or not:\n",a4_1,a6_1,a4_2,a6_2;
+	"\nCheckIfIsogenous: "; time res1, res3 := CheckIfIsogenous(p, a4_1, a6_1, a4_2, a6_2, x, y, _x);
+	"IsIsogenous: "; time res2 := IsIsogenous(E1,E2);
+	assert res1 eq res2;
+	if res1 eq false then
+		printf "Curves are not isogenous.";
+	else
+		printf "Curves are isogenous.";
+		assert res3 eq #E1;		
+	end if;
+	"\n";
+end for;
+

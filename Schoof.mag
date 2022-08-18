@@ -1,0 +1,148 @@
+// Schoof's Algorithm Implementation
+clear;
+
+AddAffinePointsGeneric := function(x1, y1, i1, x2, y2, i2, a4)
+	if i1 then
+		return x2, y2, i2;
+	elif i2 then
+		return x1, y1, i1;
+	elif x1 eq x2 then
+		if y1 eq 0 then
+			return 0*x1, 0*y1, true; 
+		elif y1 ne y2 then
+			return 0*x1, 0*y1, true;
+		else
+			L := (3*x1^2+a4)/(2*y1);
+			x3 := L^2-2*x1;
+			y3 := L*(x1-x3)-y1;
+			return x3, y3, false;
+		end if;
+	else
+		L := (y2-y1)/(x2-x1);
+		x3 := L^2-x1-x2;
+		y3 := L*(x1-x3)-y1;
+		return x3, y3, false;
+	end if;
+end function;
+
+divpol := function(l,x,a4,a6)
+	f := []; f[1] := 0*x+1; f[2] := 0*x+1; 
+	f[3] := 3*x^4+6*a4*x^2+12*a6*x-a4^2;  
+ 	f[4] := 2*(x^6+5*a4*x^4+20*a6*x^3-5*a4^2*x^2-4*a4*a6*x-8*a6^2-a4^3);
+	if l eq 0 then
+		return 0*x;
+	end if;
+	if l gt 4 then
+		for i := 5 to l do
+			if IsOdd(i) then
+				k := (i-1) div 2;
+				if IsOdd(k) then
+					f[i] := f[k+2]*f[k]^3-16*(x^3+a4*x+a6)^2*f[k-1]*f[k+1]^3;									
+				else
+					f[i] := 16*(x^3+a4*x+a6)^2*f[k+2]*f[k]^3-f[k-1]*f[k+1]^3;				
+				end if;
+			else
+				k := i div 2;
+				f[i] := (f[k+2]*f[k-1]^2-f[k-2]*f[k+1]^2)*f[k];
+			end if;
+		end for;
+ 		return f[l];
+	else
+		return f[l];
+	end if;
+end function;
+
+schoof := function(a4, a6, P, x, y, _x, q)
+	S := []; rm := []; i := 1; N := 1; k := 1; t := 1;
+	repeat 
+		t := NextPrime(t);
+		S[i] := t; i +:= 1;
+		N *:= t;
+	until N gt 4*Sqrt(q);
+
+	// l = 2
+	if GCD(Modexp(_x,q,_x^3+a4*_x+a6)-_x,_x^3+a4*_x+a6) ne 1 then
+		rm[k] := 0;
+	else
+		rm[k] := 1; 
+	end if;
+	k +:= 1;
+	
+	// l = 3,5,...
+	for i := 2 to #S do
+		l := S[i]; fl := false;
+		phil := divpol(l,_x,a4,a6);
+		ql := q mod l;
+		Q := quo<P | y^2-x^3-a4*x-a6, divpol(l,x,a4,a6)>;
+		Qx := Q!x; Qy := Q!y; Qxq := Q!x^q; Qyq := Q!y^q; Qxqs := Q!x^(q*q); Qyqs := Q!y^(q*q); 
+		
+		xql := 0*Qx; yql := 0*Qy; xqli := true;
+		for j := 1 to ql do
+			xql, yql, xqli := AddAffinePointsGeneric(xql, yql, xqli, Qx, Qy, false, a4);
+		end for;
+ 		
+ 		xqt := 0*Qx; yqt := 0*Qy; xqi := true;
+		if Qxqs ne xql then
+			xd, yd, _ := AddAffinePointsGeneric(Qxqs, Qyqs, false, xql, yql, false, a4);				
+			for td := 1 to (l-1) div 2 do
+				xqt, yqt, xqi := AddAffinePointsGeneric(xqt, yqt, xqi, Qxq, Qyq, false, a4);
+				if xd eq xqt then
+					if yd eq yqt then
+						rm[k] := td; 
+					else
+						rm[k] := -td;
+					end if;
+					k +:= 1; fl := true;
+					break;
+				end if;		
+			end for;			
+		end if;
+		if fl ne true then
+			if LegendreSymbol(ql,l) eq 1 then
+				w := Modsqrt(ql,l);
+				xw := 0*Qx; yw := 0*Qy; xwi := true;
+				for j := 1 to w do
+					xw, yw, xwi := AddAffinePointsGeneric(xw, yw, xwi, Qx, Qy, false, a4);
+				end for;
+				if GCD(UnivariatePolynomial(Qxq-xw),phil) ne 1 then
+					if GCD(UnivariatePolynomial((Qyq-yw)/yw),phil) ne 1 then
+						rm[k] := (2*w) mod l;
+					else
+						rm[k] := (-2*w) mod l;
+					end if;
+				else
+					rm[k] := 0; 
+				end if;
+			else
+				rm[k] := 0;
+			end if;
+			k +:= 1;
+		end if;
+	end for;
+
+	t := CRT(rm,S);
+	
+	if Abs(t) gt 2*Sqrt(q) then // |t| <= 2*sqrt(q)
+		t := t - N;
+	end if;
+
+	return q+1-t;
+end function;
+
+/* MAIN */
+for i := 1 to 1000 do 
+	p := NextPrime(Random([1000..5000])); n := 1;
+	q := p^n;
+	F := GF(q);
+	P<y,x> := PolynomialRing(F,2);
+	R<_x> := PolynomialRing(F);
+	repeat
+		a4 := Random(F); a6 := Random(F);
+	until IsEllipticCurve([0,0,0,a4,a6]);
+	E := EllipticCurve([0,0,0,a4,a6]);
+
+	np := schoof(a4, a6, P, x, y, _x, q);
+	printf "%4o: #E/Fq where q=%4o, a4=%4o, a6=%4o ==> %4o\n",i,q,a4,a6,np;
+	assert np eq #E;
+end for;
+
